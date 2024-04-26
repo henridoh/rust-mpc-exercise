@@ -6,9 +6,23 @@
 /// Party 0 has [a]_0, [b]_0, and [c]_0 with [a]_0 ^ [a]_1 = a (likewise for b and c).
 pub struct MulTriple {
     // secret-shared parts of multiplication triple. So a is [a]_i for Party i
-    pub a: (),
-    pub b: (),
-    pub c: ()
+    a: bool,
+    b: bool,
+    c: bool
+}
+
+impl MulTriple {
+    pub fn a(&self) -> bool { 
+        self.a 
+    }
+
+    pub fn b(&self) -> bool {
+        self.b
+    }
+
+    pub fn c(&self) -> bool {
+        self.c
+    }
 }
 
 
@@ -22,6 +36,6 @@ pub struct MulTriple {
 trait MTProvider {
 
     fn get_triple(&mut self) -> MulTriple {
-        todo!()
+        MulTriple { a: false, b: false, c: false } // TODO
     }
 }

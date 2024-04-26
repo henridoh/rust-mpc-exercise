@@ -1,25 +1,45 @@
+use std::sync::mpsc::{Sender, Receiver, channel};
 use crate::circuit::Circuit;
 
 
 
 struct Party {
-    circuit: (),
-    // also include a send and receive channel to other party
-    // have a look at https://doc.rust-lang.org/std/sync/mpsc/index.html
-    // for the std lib provided in-memory channel.
+    circuit: Circuit,
+
+    sender: Sender<bool>,
+    receiver: Receiver<bool>,
 }
 
 
 /// Creates a new pair of parties for the provided circuit that can communicate with each other
 /// to execute the provided circuit.
 pub fn new_party_pair(circuit: Circuit) -> (Party, Party) {
-    todo!("setup and return parties")
+    let (a_send, b_recv) = channel();
+    let (b_send, a_recv) = channel();
+
+    let a = Party {
+        circuit: circuit.clone(),
+        sender: a_send,
+        receiver: a_recv,
+    };
+    
+    let b = Party {
+        circuit,
+        sender: b_send,
+        receiver: b_recv,
+    };
+
+    (a, b)
 }
 
 
+pub enum Role {
+    Client, Server,
+}
+
 impl Party {
     /// Create a new party.
-    pub fn new(circuit: (), other_args: ()) -> Self {
+    pub fn new(circuit: (), role: ) -> Self {
         todo!()
     }
 
