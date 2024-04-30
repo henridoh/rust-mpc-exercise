@@ -1,68 +1,65 @@
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Gate {
-    XOR(u32, u32),
-    AND(u32, u32),
-    INV(u32),
+    XOR(usize, usize),
+    AND(usize, usize),
+    INV(usize),
     EQ { constant: bool },
-    EQW(u32),
+    EQW(usize),
     // TODO MAND {...},
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Wire {
-    Input,
-    Gate(Gate),
-}
-
-
 #[derive(Debug, Clone)]
 pub struct Header {
-    num_gates: u32,
-    num_wires: u32,
+    pub num_gates: usize,
+    pub num_wires: usize,
 
-    wires_per_input: Vec<u32>,
-    wires_per_output: Vec<u32>,
+    pub wires_per_input: Vec<usize>,
+    pub wires_per_output: Vec<usize>,
 }
 
 #[derive(Clone)]
 pub struct Circuit {
-    wires: Vec<Wire>,
+    pub header: Header,
+    pub gates: Vec<(Gate, usize)>,
 }
 
-fn parse_header<'a>(lines: &mut impl Iterator<Item=&'a str>) -> Header {
-    let mut line_iter = lines.next().unwrap().split(' ');
-    let num_gates: u32 = line_iter.next().unwrap().parse().unwrap();
-    let num_wires: u32 = line_iter.next().unwrap().parse().unwrap();
+fn parse_header(lines: &mut impl Iterator<Item=String>) -> Header {
+    let line = lines.next().unwrap();
+    let mut line_iter = line.split(' ');
+    let num_gates: usize = line_iter.next().unwrap().parse().unwrap();
+    let num_wires: usize = line_iter.next().unwrap().parse().unwrap();
     assert!(line_iter.next().is_none());
 
-    let mut line_iter = lines.next().unwrap().split(' ');
-    let niv: u32 = line_iter.next().unwrap().parse().unwrap();
-    let wires_per_input: Vec<u32> = line_iter
+    let line = lines.next().unwrap();
+    let mut line_iter = line.split(' ');
+    let niv: usize = line_iter.next().unwrap().parse().unwrap();
+    let wires_per_input: Vec<usize> = line_iter
+        .take(niv)
         .map(|x| x.parse().unwrap())
         .collect();
-    assert_eq!(wires_per_input.len(), niv as usize);
+    assert_eq!(wires_per_input.len(), niv);
 
-    let mut line_iter = lines.next().unwrap().split(' ');
-    let nov: u32 = line_iter.next().unwrap().parse().unwrap();
-    let wires_per_output: Vec<u32> = line_iter
+    let line = lines.next().unwrap();
+    let mut line_iter = line.split(' ');
+    let nov: usize = line_iter.next().unwrap().parse().unwrap();
+    let wires_per_output: Vec<usize> = line_iter
+        .take(nov)
         .map(|x| x.parse().unwrap())
         .collect();
-    assert_eq!(wires_per_output.len(), nov as usize);
+    assert_eq!(wires_per_output.len(), nov);
 
-    Header {
-        num_gates, num_wires, wires_per_input, wires_per_output
-    }
+    Header { num_gates, num_wires, wires_per_input, wires_per_output }
 }
 
-fn parse_gate(gate_repr: &str, wires: &mut Vec<Wire>) {
+fn parse_gate(gate_repr: &str, gates: &mut Vec<(Gate, usize)>) {
     let mut iter = gate_repr.split(' ');
 
-    let n_in_wires: u32 = iter.next().unwrap().parse().unwrap();
+    let n_in_wires: usize = iter.next().unwrap().parse().unwrap();
     assert!(n_in_wires == 1 || n_in_wires == 2);
-    let n_out_wires: u32 = iter.next().unwrap().parse().unwrap();
+    let n_out_wires: usize = iter.next().unwrap().parse().unwrap();
 
-    let mut in_wires: Vec<u32> = Vec::with_capacity(n_in_wires as usize);
-    let mut out_wires: Vec<u32> = Vec::with_capacity(n_out_wires as usize);
+    let mut in_wires: Vec<usize> = Vec::with_capacity(n_in_wires);
+    let mut out_wires: Vec<usize> = Vec::with_capacity(n_out_wires);
     assert_eq!(n_out_wires, 1, "MAND Gates not implemented yet!"); // TODO MAND
 
     for _ in 0..n_in_wires {
@@ -86,13 +83,17 @@ fn parse_gate(gate_repr: &str, wires: &mut Vec<Wire>) {
         g => panic!("Unknown gate type {}!", g)
     };
 
-    wires.push(Wire::Gate(gate));
+    gates.push((gate, out_wires[0]));
 }
 
 impl Circuit {
     /// Parses the bristol file contents into a circuit
     pub fn parse(circuit: &str) -> Self {
-        let mut lines = circuit.lines();
+        return Self::parse_lines(&mut circuit.lines().map(|s| s.to_string()));
+    }
+
+    pub fn parse_lines(circuit: &mut dyn Iterator<Item=String>) -> Self {
+        let mut lines = circuit;
 
         let header = parse_header(&mut lines);
 
@@ -102,25 +103,40 @@ impl Circuit {
             "Expected empty line"
         );
 
-        let mut wires = Vec::with_capacity(header.num_wires as usize);
-        for _ in 0..header.wires_per_input.iter().sum() {
-            wires.push(Wire::Input)
-        }
+        let mut gates = Vec::with_capacity(header.num_gates);
 
         for _ in 0..header.num_gates {
-            parse_gate(lines.next().expect("Expected gate, got EOF"), &mut wires);
+            parse_gate(&lines.next().expect("Expected gate, got EOF"), &mut gates);
         }
 
-        Circuit { wires }
+        Circuit { header, gates }
+    }
+
+    pub fn input_bit_count(&self) -> usize {
+        self.header.wires_per_input.iter().sum()
+    }
+
+    pub fn output_bit_count(&self) -> usize {
+        self.header.wires_per_output.iter().sum()
+    }
+
+    pub fn offset_of_parameter(&self, parameter_index: usize) -> usize {
+        self.header.wires_per_input.iter()
+            .take(parameter_index)
+            .sum()
+    }
+
+    pub fn and_count(&self) -> usize {
+        self.gates.iter().filter(
+            |w| matches!(w, (Gate::AND(_, _), _))
+        ).count()
     }
 }
 
 
-// A `#[cfg(test)]` marks the following block as conditionally included only for test builds.
-// cfg directives can achieve similar things as preprocessor directives in C/C++.
 #[cfg(test)]
 mod tests {
-    use crate::circuit::{Circuit, Gate, Wire};
+    use super::*;
 
     // Functions marked with `#[test]` are automatically run when you execute `cargo test`.
     #[test]
@@ -135,8 +151,8 @@ mod tests {
         let circuit = Circuit::parse(source);
 
         assert_eq!(
-            circuit.wires,
-            vec![Wire::Input, Wire::Input, Wire::Gate(Gate::AND(0, 1))]
+            circuit.gates,
+            vec![(Gate::AND(0, 1), 2)]
         );
     }
 
