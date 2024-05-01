@@ -4,16 +4,16 @@ pub use error::GMWError;
 
 use std::cell::RefCell;
 use std::sync::mpsc::{Sender, Receiver, channel};
-use crate::circuit::{Circuit, Gate};
-use rand::{Rng, thread_rng};
+use crate::circuit::{Circuit, Gate, GateOperation};
+use rand::{Rng, RngCore, thread_rng};
 use rand::distributions::Standard;
-use crate::mul_triple::{MTProvider, MulTriple, TrivialMTP};
+use rand::rngs::StdRng;
+use crate::mul_triple::{MTProvider, MulTriple, SharedSeedMTP};
 
 
 #[derive(Debug)]
 enum MessageType {
     InputShares {
-        role: Role,
         shares: Vec<bool>,
     },
     And {
@@ -53,12 +53,16 @@ pub struct Party<T: MTProvider> {
 
 /// Creates a new pair of parties for the provided circuit that can communicate with each other
 /// to execute the provided circuit.
-pub fn new_party_pair(circuit: Circuit) -> (Party<TrivialMTP>, Party<TrivialMTP>) {
+pub fn new_party_pair(circuit: Circuit)
+        -> (Party<SharedSeedMTP<StdRng>>, Party<SharedSeedMTP<StdRng>>) {
     let (a_send, b_recv) = channel();
     let (b_send, a_recv) = channel();
 
-    let mtp_a = TrivialMTP {};
-    let mtp_b = TrivialMTP {};
+    let mut seed: [u8; 32] = Default::default();
+    thread_rng().fill_bytes(&mut seed);
+
+    let mtp_a: SharedSeedMTP<StdRng> = SharedSeedMTP::new(seed);
+    let mtp_b: SharedSeedMTP<StdRng> = SharedSeedMTP::new(seed);
 
     (Party::new(circuit.clone(), a_send, a_recv, Role::P0, mtp_a),
      Party::new(circuit, b_send, b_recv, Role::P1, mtp_b))
@@ -81,7 +85,13 @@ impl<T: MTProvider> Party<T> {
         circuit: Circuit, send_on: Sender<MessageType>,
         recv_on: Receiver<MessageType>, role: Role, mtp: T,
     ) -> Self {
-        Party { circuit, sender: send_on, receiver: recv_on, role, mtp: RefCell::new(mtp) }
+        Party { 
+            circuit, 
+            sender: send_on,
+            receiver: recv_on,
+            role,
+            mtp: RefCell::new(mtp) 
+        }
     }
 
     fn compute_and(&self, x: bool, y: bool) -> Result<bool, GMWError> {
@@ -103,6 +113,21 @@ impl<T: MTProvider> Party<T> {
         }
     }
 
+    fn exchange_shares(&self, input: &[bool]) -> Result<(Vec<bool>, Vec<bool>), GMWError> {
+        let (priv_input_share, pub_input_share) = generate_shares(input);
+
+        self.sender.send(
+            MessageType::InputShares { shares: pub_input_share }
+        )?;
+
+        let MessageType::InputShares { shares: partner_share } = self.receiver.recv()?
+            else {
+                return Err(GMWError::ProtocolError);
+            };
+
+        Ok((priv_input_share.into(), partner_share.into()))
+    }
+
     /// Executes the GMW protocol with the linked party for the stored circuit.
     pub fn execute(&mut self, input: &[bool]) -> Result<Vec<bool>, GMWError> {
         let circuit = &self.circuit;
@@ -114,19 +139,14 @@ impl<T: MTProvider> Party<T> {
             });
         }
 
-        let (priv_input_share, pub_input_share) = generate_shares(input);
 
-        self.sender.send(
-            MessageType::InputShares { role: self.role, shares: pub_input_share }
-        )?;
-        let MessageType::InputShares { 
-            role: partner_role, shares: partner_share
-        } = self.receiver.recv()? else { return Err(GMWError::ProtocolError); };
-        
+        let (own_share, partner_share) = self.exchange_shares(input)?;
+        let partner_role = if self.role == Role::P0 { Role::P1 } else { Role::P0 };
+
         let mut wire_shares = vec![None; circuit.header.num_wires];
 
         let own_offset = self.role.parameter_offset(circuit);
-        for (i, &v) in priv_input_share.iter().enumerate() {
+        for (i, &v) in own_share.iter().enumerate() {
             wire_shares[own_offset + i] = Some(v);
         }
 
@@ -136,10 +156,10 @@ impl<T: MTProvider> Party<T> {
         }
 
 
-        for (gate, out_wire) in &circuit.gates {
-            let out_wire: usize = *out_wire;
+        for Gate { op: gate, output_wire } in &circuit.gates {
+            let out_wire: usize = *output_wire;
             match gate {
-                &Gate::XOR(a, b) => {
+                &GateOperation::XOR(a, b) => {
                     let (a, b) = (
                         wire_shares[a].unwrap_or_else(|| panic!("Wire {} should be set by now", a)),
                         wire_shares[b].unwrap_or_else(|| panic!("Wire {} should be set by now", b)),
@@ -147,7 +167,7 @@ impl<T: MTProvider> Party<T> {
                     wire_shares[out_wire] = Some(a ^ b);
                 }
 
-                &Gate::INV(x) => {
+                &GateOperation::INV(x) => {
                     let x = wire_shares[x]
                         .unwrap_or_else(|| panic!("Wire {} should be set by now", x));
                     if self.role == Role::P0 {
@@ -157,7 +177,7 @@ impl<T: MTProvider> Party<T> {
                     }
                 }
 
-                &Gate::AND(a, b) => {
+                &GateOperation::AND(a, b) => {
                     let (a, b) = (
                         wire_shares[a].unwrap_or_else(|| panic!("Wire {} should be set by now", a)),
                         wire_shares[b].unwrap_or_else(|| panic!("Wire {} should be set by now", b)),

@@ -1,11 +1,11 @@
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::sync::mpsc::{RecvError, SendError};
-use crate::circuit::Gate;
+use crate::circuit::GateOperation;
 
 #[derive(Debug)]
 pub enum GMWError<'a> {
-    InvalidGate(Gate),
+    InvalidGate(GateOperation),
     ProtocolError,
     NetworkError(Box<dyn Error + 'a>),
     InputLengthMismatch { actual: usize, expected: usize },

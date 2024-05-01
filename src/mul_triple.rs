@@ -1,3 +1,5 @@
+use rand::{Rng, SeedableRng};
+
 /// A MulTriple (short for multiplication triple) is used to efficiently perform a multiplication
 /// of secret values in the online phase of the GMW protocol. A MulTriple comprises the random values
 /// a,b,c in {0,1} s.t. c = a & b. These random values are secret-shared between the parties, so e.g.
@@ -28,3 +30,26 @@ impl MTProvider for TrivialMTP {
         MulTriple{ a: false, b: false, c: false }
     }
 }
+
+pub struct SharedSeedMTP<T: SeedableRng + Rng> {
+    rng: T,
+}
+
+impl<T: SeedableRng + Rng> SharedSeedMTP<T> {
+    pub fn new(seed: T::Seed) -> Self {
+        SharedSeedMTP {
+            rng: T::from_seed(seed)
+        }
+    }
+}
+
+impl<T: SeedableRng + Rng> MTProvider for SharedSeedMTP<T>{
+    fn get_triple(&mut self) -> MulTriple {
+        let a = self.rng.gen();
+        let b = self.rng.gen();
+        let c = self.rng.gen();
+
+        MulTriple { a, b, c }
+    }
+}
+
