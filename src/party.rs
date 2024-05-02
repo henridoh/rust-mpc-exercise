@@ -125,7 +125,7 @@ impl<T: MTProvider> Party<T> {
                 return Err(GMWError::ProtocolError);
             };
 
-        Ok((priv_input_share.into(), partner_share.into()))
+        Ok((priv_input_share, partner_share))
     }
 
     /// Executes the GMW protocol with the linked party for the stored circuit.

@@ -4,14 +4,11 @@ use std::num::ParseIntError;
 
 #[derive(Debug)]
 pub enum ParserError {
-    TokenError(Box<dyn Error>),
-    SyntaxError(String),
-    EndOfLineError,
-    EndOfFileError,
+    Token(Box<dyn Error>),
+    Syntax(String),
+    EndOfLine,
+    EndOfFile,
 }
-
-trait ParserErrorTrait {}
-impl ParserErrorTrait for ParserError {}
 
 impl Error for ParserError {}
 
@@ -19,13 +16,13 @@ impl Display for ParserError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             // TODO schöner machen
-            ParserError::TokenError(err) =>
+            ParserError::Token(err) =>
                 write!(f, "ParserError: {}", *err),
-            ParserError::EndOfLineError =>
+            ParserError::EndOfLine =>
                 write!(f, "EOL while parsing."),
-            ParserError::EndOfFileError =>
+            ParserError::EndOfFile =>
                 write!(f, "EOF while parsing."),
-            ParserError::SyntaxError(s) => 
+            ParserError::Syntax(s) =>
                 write!(f, "Syntax Error: {s}"),
         }
     }
@@ -33,6 +30,6 @@ impl Display for ParserError {
 
 impl From<ParseIntError> for ParserError {
     fn from(value: ParseIntError) -> Self {
-        ParserError::TokenError(Box::new(value))
+        ParserError::Token(Box::new(value))
     }
 }

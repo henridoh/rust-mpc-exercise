@@ -53,8 +53,8 @@ fn main() {
     assert_eq!(res1, res2);
 
     let mut res: i64 = 0;
-    for i in 0..64 {
-        res += if res1[i] {1} else {0} << i;
+    for (i, v) in res1.iter().enumerate().take(64) {
+        res += if *v {1} else {0} << i;
     }
 
     println!("{res}")
