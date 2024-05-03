@@ -1,40 +1,31 @@
 mod error;
+mod network;
 
 pub use error::GMWError;
 
+use network::GMWConnection;
+
 use std::cell::RefCell;
-use std::sync::mpsc::{Sender, Receiver, channel};
+use std::sync::mpsc::{channel};
 use crate::circuit::{Circuit, Gate, GateOperation};
 use rand::{Rng, RngCore, thread_rng};
 use rand::distributions::Standard;
 use rand::rngs::StdRng;
 use crate::mul_triple::{MTProvider, MulTriple, SharedSeedMTP};
-
-
-#[derive(Debug)]
-enum MessageType {
-    InputShares {
-        shares: Vec<bool>,
-    },
-    And {
-        d: bool,
-        e: bool,
-    },
-    Result(Vec<bool>),
-}
-
+use crate::party::GMWError::ProtocolError;
+use crate::party::network::{MemChannelConnection, MessageType};
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 enum Role {
-    P0,
-    P1,
+    Server,
+    Client,
 }
 
 impl Role {
     pub fn index(&self) -> usize {
         match self {
-            Role::P0 => 0,
-            Role::P1 => 1,
+            Role::Server => 0,
+            Role::Client => 1,
         }
     }
     pub fn parameter_offset(&self, circuit: &Circuit) -> usize {
@@ -42,21 +33,30 @@ impl Role {
     }
 }
 
-pub struct Party<T: MTProvider> {
+pub struct Party<M: MTProvider, C: GMWConnection> {
     circuit: Circuit,
-    sender: Sender<MessageType>,
-    receiver: Receiver<MessageType>,
     role: Role,
-    mtp: RefCell<T>,
+    mtp: RefCell<M>,
+    connection: C,
 }
-
 
 /// Creates a new pair of parties for the provided circuit that can communicate with each other
 /// to execute the provided circuit.
 pub fn new_party_pair(circuit: Circuit)
-        -> (Party<SharedSeedMTP<StdRng>>, Party<SharedSeedMTP<StdRng>>) {
+                      -> (Party<SharedSeedMTP<StdRng>, MemChannelConnection>,
+                          Party<SharedSeedMTP<StdRng>, MemChannelConnection>) {
     let (a_send, b_recv) = channel();
     let (b_send, a_recv) = channel();
+
+    let a_connection = MemChannelConnection {
+        sender: a_send,
+        receiver: a_recv,
+    };
+
+    let b_connection = MemChannelConnection {
+        sender: b_send,
+        receiver: b_recv,
+    };
 
     let mut seed: [u8; 32] = Default::default();
     thread_rng().fill_bytes(&mut seed);
@@ -64,8 +64,8 @@ pub fn new_party_pair(circuit: Circuit)
     let mtp_a: SharedSeedMTP<StdRng> = SharedSeedMTP::new(seed);
     let mtp_b: SharedSeedMTP<StdRng> = SharedSeedMTP::new(seed);
 
-    (Party::new(circuit.clone(), a_send, a_recv, Role::P0, mtp_a),
-     Party::new(circuit, b_send, b_recv, Role::P1, mtp_b))
+    (Party::new(circuit.clone(), a_connection, Role::Server, mtp_a),
+     Party::new(circuit, b_connection, Role::Client, mtp_b))
 }
 
 fn generate_shares(input: &[bool]) -> (Vec<bool>, Vec<bool>) {
@@ -79,53 +79,28 @@ fn generate_shares(input: &[bool]) -> (Vec<bool>, Vec<bool>) {
 }
 
 
-impl<T: MTProvider> Party<T> {
+impl<M: MTProvider, C: GMWConnection> Party<M, C> {
     /// Create a new party.
     fn new(
-        circuit: Circuit, send_on: Sender<MessageType>,
-        recv_on: Receiver<MessageType>, role: Role, mtp: T,
-    ) -> Self {
-        Party { 
-            circuit, 
-            sender: send_on,
-            receiver: recv_on,
-            role,
-            mtp: RefCell::new(mtp) 
-        }
-    }
+        circuit: Circuit, connection: C, role: Role, mtp: M,
+    ) -> Self { Party { circuit, connection, role, mtp: RefCell::new(mtp) } }
 
     fn compute_and(&self, x: bool, y: bool) -> Result<bool, GMWError> {
         let MulTriple { a, b, c } = self.mtp.borrow_mut().get_triple();
 
         let (d1, e1) = (x ^ a, y ^ b);
 
-        self.sender.send(MessageType::And { d: d1, e: e1 })?;
-        let MessageType::And { d: d2, e: e2 } = self.receiver.recv()? else {
-            return Err(GMWError::ProtocolError);
-        };
+        let MessageType::And { d: d2, e: e2 } = self.connection.exchange(
+            MessageType::And { d: d1, e: e1 }
+        )? else { return Err(ProtocolError); };
 
         let (d, e) = (d1 ^ d2, e1 ^ e2);
 
-        if self.role == Role::P0 {
+        if self.role == Role::Server {
             Ok(d & b ^ e & a ^ c ^ d & e)
         } else {
             Ok(d & b ^ e & a ^ c)
         }
-    }
-
-    fn exchange_shares(&self, input: &[bool]) -> Result<(Vec<bool>, Vec<bool>), GMWError> {
-        let (priv_input_share, pub_input_share) = generate_shares(input);
-
-        self.sender.send(
-            MessageType::InputShares { shares: pub_input_share }
-        )?;
-
-        let MessageType::InputShares { shares: partner_share } = self.receiver.recv()?
-            else {
-                return Err(GMWError::ProtocolError);
-            };
-
-        Ok((priv_input_share, partner_share))
     }
 
     /// Executes the GMW protocol with the linked party for the stored circuit.
@@ -140,8 +115,13 @@ impl<T: MTProvider> Party<T> {
         }
 
 
-        let (own_share, partner_share) = self.exchange_shares(input)?;
-        let partner_role = if self.role == Role::P0 { Role::P1 } else { Role::P0 };
+        let (own_share, pub_share) = generate_shares(input);
+        let MessageType::ParameterShares(partner_share) = self.connection.exchange(
+            MessageType::ParameterShares(pub_share)
+        )? else {
+            return Err(ProtocolError)
+        };
+        let partner_role = if self.role == Role::Server { Role::Client } else { Role::Server };
 
         let mut wire_shares = vec![None; circuit.header.num_wires];
 
@@ -170,7 +150,7 @@ impl<T: MTProvider> Party<T> {
                 &GateOperation::INV(x) => {
                     let x = wire_shares[x]
                         .unwrap_or_else(|| panic!("Wire {} should be set by now", x));
-                    if self.role == Role::P0 {
+                    if self.role == Role::Server {
                         wire_shares[out_wire] = Some(!x);
                     } else {
                         wire_shares[out_wire] = Some(x);
@@ -197,10 +177,9 @@ impl<T: MTProvider> Party<T> {
             .map(Option::unwrap)
             .collect();
 
-        self.sender.send(MessageType::Result(d1.clone()))?;
-        let MessageType::Result(d2) = self.receiver.recv()? else {
-            return Err(GMWError::ProtocolError);
-        };
+        let MessageType::Result(d2) = self.connection.exchange(
+            MessageType::Result(d1.clone())
+        )? else { return Err(ProtocolError); };
 
         Ok(d1.iter().zip(d2.iter()).map(|(x, y)| x ^ y).collect())
     }

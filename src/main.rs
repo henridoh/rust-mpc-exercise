@@ -23,8 +23,8 @@ fn main() {
     println!("Hello, world!");
 
     let _stdin = io::stdin();
-
-    let c = Circuit::parse_lines(&mut _stdin.lines().map(|x| x.unwrap())).unwrap();
+    
+    let c = Circuit::parse("").unwrap();
 
     let (mut p1, mut p2) = new_party_pair(c);
 

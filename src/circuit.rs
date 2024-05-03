@@ -3,6 +3,7 @@ use crate::circuit::error::ParserError;
 
 mod parser;
 mod error;
+mod tokenizer;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum GateOperation {
@@ -39,10 +40,10 @@ pub struct Circuit {
 impl Circuit {
     /// Parses the bristol file contents into a circuit
     pub fn parse(circuit: &str) -> Result<Self, ParserError> {
-        return Self::parse_lines(&mut circuit.lines().map(|s| s.to_string()));
+        return Self::parse_stream(&mut circuit.chars());
     }
 
-    pub fn parse_lines(circuit: &mut impl Iterator<Item=String>) -> Result<Self, ParserError> {
+    pub fn parse_stream(circuit: &mut dyn Iterator<Item=char>) -> Result<Self, ParserError> {
         parser::parse(circuit)
     }
 
