@@ -1,9 +1,10 @@
 use std::fmt::Debug;
-use crate::circuit::error::ParserError;
 
 mod parser;
 mod error;
 mod tokenizer;
+
+pub use parser::{parse_lines, parse};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum GateOperation {
@@ -38,15 +39,6 @@ pub struct Circuit {
 
 
 impl Circuit {
-    /// Parses the bristol file contents into a circuit
-    pub fn parse(circuit: &str) -> Result<Self, ParserError> {
-        return Self::parse_stream(&mut circuit.chars());
-    }
-
-    pub fn parse_stream(circuit: &mut dyn Iterator<Item=char>) -> Result<Self, ParserError> {
-        parser::parse(circuit)
-    }
-
     pub fn input_bit_count(&self) -> usize {
         self.header.wires_per_input.iter().sum()
     }

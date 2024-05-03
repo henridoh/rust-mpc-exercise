@@ -72,6 +72,8 @@ pub fn parse_gate(token_stream: &mut TokenStream) -> Result<Gate, ParserError> {
         return Err(Syntax("MAND Gates not implemented yet".into()))
     }
 
+    token_stream.accept_newline()?;
+
     Ok(Gate {
         op: gate,
         output_wire: out_wires[0],
@@ -94,4 +96,48 @@ pub fn parse(circuit: &mut dyn Iterator<Item=char>) -> Result<Circuit, ParserErr
     }
 
     Ok(Circuit { header, gates })
+}
+
+struct CharIter<'a> {
+    lines: &'a mut dyn Iterator<Item=String>,
+    current_line: Option<String>,
+    line_index: usize,
+}
+
+impl<'a> CharIter<'a> {
+    pub fn new(lines: &'a mut dyn Iterator<Item=String>) -> Self {
+        CharIter {
+            lines,
+            current_line: None,
+            line_index: 0,
+        }
+    }
+}
+
+impl<'a> Iterator for CharIter<'a> {
+    type Item = char;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.current_line.is_none() {
+            self.line_index = 0;
+            self.current_line = Some(self.lines.next()?);
+        }
+
+        let line = self.current_line.as_mut().unwrap();
+        match line.chars().nth(self.line_index) {
+            Some(c) => {
+                self.line_index += 1;
+                Some(c)
+            },
+            None => {
+                self.current_line = None;
+                Some('\n')
+            }
+        }
+    }
+}
+
+pub fn parse_lines(circuit: &mut dyn Iterator<Item=String>) -> Result<Circuit, ParserError> {
+    let mut iter = CharIter::new(circuit);
+    parse(&mut iter)
 }

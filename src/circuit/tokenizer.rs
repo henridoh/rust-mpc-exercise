@@ -12,8 +12,8 @@ pub enum LexicalUnit {
 
 #[derive(Debug, Clone)]
 pub struct Location {
-    line: usize,
-    char: usize,
+    pub line: usize,
+    pub char: usize,
 }
 
 #[derive(Debug)]
