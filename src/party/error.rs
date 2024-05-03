@@ -51,7 +51,7 @@ impl<T: 'static> From<SendError<T>> for NetworkError {
     }
 }
 
-impl<'a> From<RecvError> for NetworkError {
+impl From<RecvError> for NetworkError {
     fn from(value: RecvError) -> Self {
         Self(Box::new(value))
     }

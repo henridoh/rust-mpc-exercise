@@ -3,6 +3,7 @@ use std::fmt::Debug;
 mod parser;
 mod error;
 mod tokenizer;
+mod flat_charstream;
 
 pub use parser::{parse_lines, parse};
 
