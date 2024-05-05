@@ -13,7 +13,7 @@ pub enum LexicalUnit {
 #[derive(Debug, Clone)]
 pub struct Location {
     pub line: usize,
-    pub char: usize,
+    pub column: usize,
 }
 
 #[derive(Debug)]
@@ -31,8 +31,12 @@ impl<'a> TokenStream<'a> {
     pub fn new(char_stream: &'a mut dyn Iterator<Item=char>) -> Self {
         TokenStream {
             char_stream: char_stream.peekable(),
-            location: Location { char: 0, line: 0 },
+            location: Location { column: 0, line: 0 },
         }
+    }
+
+    pub fn current_location(&self) -> Location {
+        self.location.clone()
     }
 
     pub fn accept_newline(&mut self) -> Result<(), ParserError> {
@@ -109,7 +113,7 @@ impl<'a> TokenStream<'a> {
     fn skip_whitespace(&mut self) {
         while let Some(' ') = self.char_stream.peek() {
             self.char_stream.next();
-            self.location.char += 1
+            self.location.column += 1
         }
     }
 
@@ -118,7 +122,7 @@ impl<'a> TokenStream<'a> {
         let location = self.location.clone();
 
         while let Some(digit) = self.char_stream.next_if(|x| x.is_numeric()) {
-            self.location.char += 1;
+            self.location.column += 1;
             number.push(digit);
         }
 
@@ -135,7 +139,7 @@ impl<'a> TokenStream<'a> {
         let location = self.location.clone();
 
         while let Some(c) = self.char_stream.next_if(|&x| x != ' ' && x != '\n') {
-            self.location.char += 1;
+            self.location.column += 1;
             identifier.push(c)
         }
 
@@ -158,11 +162,11 @@ impl<'a> Iterator for TokenStream<'a> {
             self.char_stream.next();
             let token = Some(Token{
                 location: self.location.clone(),
-                value: LexicalUnit::NewLine
+                value: NewLine
             });
             self.location = Location {
                 line: self.location.line + 1,
-                char: 0
+                column: 0
             };
 
             token

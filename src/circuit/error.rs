@@ -1,11 +1,11 @@
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
-use crate::circuit::tokenizer::{Token};
+use crate::circuit::tokenizer::{Location, Token};
 
 #[derive(Debug)]
 pub enum ParserError {
     Token { expected: &'static str, actual: Token },
-    Syntax(String),
+    Syntax { message: String, location: Location },
 }
 
 impl Error for ParserError {}
@@ -13,15 +13,17 @@ impl Error for ParserError {}
 impl Display for ParserError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            ParserError::Token { expected, actual } =>
-                write!(f, "TokenError in line {}, column {}: expected {} but got {:?}",
-                       actual.location.line,
-                       actual.location.char,
+            ParserError::Token {
+                expected,
+                actual: Token { location, value }
+            } =>
+                write!(f, "TokenError in line {}, column {}: Expected {} but got {:?}",
+                       location.line,
+                       location.column,
                        expected,
-                       actual.value,
-                ),
-            ParserError::Syntax(s) =>
-                write!(f, "Syntax Error: {s}"),
+                       value),
+            ParserError::Syntax { message, location } =>
+                write!(f, "Syntax Error in line {}: {}", message, location.column),
         }
     }
 }

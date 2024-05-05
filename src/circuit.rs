@@ -1,11 +1,9 @@
 use std::fmt::Debug;
+use crate::circuit::error::ParserError;
 
 mod parser;
 mod error;
 mod tokenizer;
-mod flat_charstream;
-
-pub use parser::{parse_lines, parse};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum GateOperation {
@@ -40,6 +38,15 @@ pub struct Circuit {
 
 
 impl Circuit {
+    /// Parses the bristol file contents into a circuit
+    pub fn parse(circuit: &str) -> Result<Self, ParserError> {
+        return Self::parse_stream(&mut circuit.chars());
+    }
+
+    pub fn parse_stream(circuit: &mut dyn Iterator<Item=char>) -> Result<Self, ParserError> {
+        parser::parse(circuit)
+    }
+
     pub fn input_bit_count(&self) -> usize {
         self.header.wires_per_input.iter().sum()
     }
@@ -70,17 +77,21 @@ mod tests {
     #[test]
     fn test_simple_and() {
         let source = "\
-            1 3\n\
+            2 4\n\
             2 1 1\n\
             1 1\n\
             \n\
-            2 1 0 1 2 AND\n";
+            2 1 0 1 2 AND\n\
+            2 1 1 2 3 XOR\n";
 
         let circuit = Circuit::parse(source).unwrap();
 
         assert_eq!(
             circuit.gates,
-            vec![Gate{ op: GateOperation::AND(0, 1), output_wire: 2} ]
+            vec![
+                Gate{ op: GateOperation::AND(0, 1), output_wire: 2}, 
+                Gate{ op: GateOperation::XOR(1, 2), output_wire: 3}
+            ]
         );
     }
 }
