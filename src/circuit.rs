@@ -1,4 +1,5 @@
 use std::fmt::Debug;
+use std::ops::Range;
 use crate::circuit::error::ParserError;
 
 mod parser;
@@ -55,10 +56,17 @@ impl Circuit {
         self.header.wires_per_output.iter().sum()
     }
 
-    pub fn offset_of_parameter(&self, parameter_index: usize) -> usize {
+    pub fn parameter_offset(&self, parameter_index: usize) -> usize {
         self.header.wires_per_input.iter()
             .take(parameter_index)
             .sum()
+    }
+    
+    pub fn parameter_range(&self, parameter_index: usize) -> Range<usize> {        
+        let offset = self.parameter_offset(parameter_index);
+        let size = self.header.wires_per_input[parameter_index];
+        
+        offset..offset+size
     }
 
     pub fn and_count(&self) -> usize {

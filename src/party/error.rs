@@ -1,7 +1,8 @@
 use std::error::Error;
 use std::fmt::{Display, Formatter};
-use std::sync::mpsc::{RecvError, SendError};
 use crate::circuit::GateOperation;
+
+use crate::network::NetworkError;
 
 #[derive(Debug)]
 pub enum GMWError {
@@ -35,24 +36,3 @@ impl From<NetworkError> for GMWError {
 }
 
 
-#[derive(Debug)]
-pub struct NetworkError(Box<dyn Error>);
-
-impl Error for NetworkError {}
-impl Display for NetworkError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "NetworkError: {}", self.0)
-    }
-}
-
-impl<T: 'static> From<SendError<T>> for NetworkError {
-    fn from(value: SendError<T>) -> Self { 
-        Self(Box::new(value)) 
-    }
-}
-
-impl From<RecvError> for NetworkError {
-    fn from(value: RecvError) -> Self {
-        Self(Box::new(value))
-    }
-}
