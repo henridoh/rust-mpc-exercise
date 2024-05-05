@@ -2,11 +2,27 @@ use std::error::Error;
 use std::fmt::{Display, Formatter};
 
 #[derive(Debug)]
-pub struct NetworkError(pub Box<dyn Error>); //TODO
+pub enum NetworkError{
+    ConnectionError(Box<dyn Error>),
+    Other(&'static str), //TODO
+}
 
 impl Error for NetworkError {}
 impl Display for NetworkError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "NetworkError: {}", self.0)
+        match self {
+            NetworkError::ConnectionError(err) => {
+                write!(f, "NetworkError: {}", err)
+            }
+            &NetworkError::Other(msg) => {
+                write!(f, "NetworkError: {}", msg)
+            }
+        }
+    }
+}
+
+impl From<&'static str> for NetworkError {
+    fn from(value: &'static str) -> Self {
+        NetworkError::Other(value)
     }
 }

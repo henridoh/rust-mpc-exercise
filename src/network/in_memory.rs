@@ -1,33 +1,42 @@
 use std::sync::mpsc::{Receiver, RecvError, Sender, SendError};
-use crate::network::{GMWConnection, NetworkError, NetworkPacket};
+use crate::network::{GMWConnection, GMWPacket, NetworkError};
 
-pub struct MemChannelConnection<T: 'static> {
-    pub sender: Sender<NetworkPacket<T>>,
-    pub receiver: Receiver<NetworkPacket<T>>,
+
+pub enum MemChannelPacket<T: 'static> {
+    Gmw(GMWPacket),
+    Mtp(T)
 }
 
-impl<T: 'static> GMWConnection for MemChannelConnection<T> {
-    type OtherPacket = T;
+pub struct MemChannelConnection<T: 'static> {
+    pub sender: Sender<MemChannelPacket<T>>,
+    pub receiver: Receiver<MemChannelPacket<T>>,
+}
 
-    fn send(&self, message: NetworkPacket<T>) -> Result<(), NetworkError> {
-        self.sender.send(message)?;
+
+
+impl<T> GMWConnection for MemChannelConnection<T> {
+    fn send(&self, message: GMWPacket) -> Result<(), NetworkError> {
+        self.sender.send(MemChannelPacket::Gmw(message))?;
         Ok(())
     }
 
-    fn recv(&self) -> Result<NetworkPacket<T>, NetworkError> {
-        Ok(self.receiver.recv()?)
+    fn recv(&self) -> Result<GMWPacket, NetworkError> {
+        let MemChannelPacket::Gmw(packet) = self.receiver.recv()? else {
+            return Err("Protocol Error: Expected GMW packet but got MTP packet.".into());
+        };
+        Ok(packet)
     }
 }
 
-impl<T> From<SendError<NetworkPacket<T>>> for NetworkError {
-    fn from(value: SendError<NetworkPacket<T>>) -> Self {
-        NetworkError(Box::new(value))
+impl<T: 'static> From<SendError<MemChannelPacket<T>>> for NetworkError {
+    fn from(value: SendError<MemChannelPacket<T>>) -> Self {
+        NetworkError::ConnectionError(Box::new(value))
     }
 }
 
 impl From<RecvError> for NetworkError {
     fn from(value: RecvError) -> Self{
-        NetworkError(Box::new(value))
+        NetworkError::ConnectionError(Box::new(value))
     }
 }
 

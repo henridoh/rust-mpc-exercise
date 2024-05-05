@@ -6,7 +6,7 @@ mod parser;
 mod error;
 mod tokenizer;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GateOperation {
     XOR(usize, usize),
     AND(usize, usize),
@@ -16,7 +16,7 @@ pub enum GateOperation {
     // TODO MAND {...},
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Gate {
     pub op: GateOperation,
     pub output_wire: usize,
