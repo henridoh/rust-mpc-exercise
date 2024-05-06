@@ -1,7 +1,12 @@
+use std::cell::RefCell;
 use std::io;
+use std::os::unix::net::UnixStream;
+use std::rc::Rc;
 use std::thread;
 use mpc_in_rust::circuit;
-use mpc_in_rust::party::new_party_pair;
+use mpc_in_rust::mul_triple::provider::TrivialMTP;
+use mpc_in_rust::party::Party;
+use mpc_in_rust::party::Role::{Client, Server};
 
 /// For argument parsing, my favorite crate is clap https://docs.rs/clap/latest/clap/
 /// Especially its derive feature makes declarative argument parsing really easy.
@@ -21,27 +26,35 @@ fn main() {
     let _stdin = io::stdin();
 
     let c = circuit::parser::parse_lines(&mut _stdin.lines().map(|x| x.unwrap())).unwrap();
-
-    let (mut p1, mut p2) = new_party_pair(c);
+    let c_copy = c.clone();
 
     let x: u64 = 123;
     let y: u64 = 456;
 
+    let (a, b) = UnixStream::pair().unwrap();
 
     let h1 = thread::spawn(move || {
-        let mut ser_x = [false; 64];
+        let mtp = TrivialMTP{};
+        let mut p = Party::new(c, Rc::new(RefCell::new(a)), Server, mtp);
+
+        let mut bytes = [false; 64];
         for i in 0..64 {
-            ser_x[i] = (x >> i) & 1 == 1;
+            bytes[i] = (x >> i) & 1 == 1;
         }
-        p1.execute(&ser_x).unwrap()
+
+        p.execute(&bytes).unwrap()
     });
 
     let h2 = thread::spawn(move || {
-        let mut ser_y = [false; 64];
+        let mtp = TrivialMTP{};
+        let mut p = Party::new(c_copy, Rc::new(RefCell::new(b)), Client, mtp);
+
+        let mut bytes = [false; 64];
         for i in 0..64 {
-            ser_y[i] = (y >> i) & 1 == 1;
+            bytes[i] = (y >> i) & 1 == 1;
         }
-        p2.execute(&ser_y).unwrap()
+
+        p.execute(&bytes).unwrap()
     });
 
     let res1 = h1.join().unwrap();

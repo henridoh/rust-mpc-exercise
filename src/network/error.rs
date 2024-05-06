@@ -26,3 +26,9 @@ impl From<&'static str> for NetworkError {
         NetworkError::Other(value)
     }
 }
+
+impl From<std::io::Error> for NetworkError {
+    fn from(value: std::io::Error) -> Self {
+        NetworkError::ConnectionError(Box::new(value))
+    }
+}
