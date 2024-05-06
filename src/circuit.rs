@@ -1,10 +1,10 @@
 use std::fmt::Debug;
 use std::ops::Range;
-use crate::circuit::error::ParserError;
 
-mod parser;
+pub mod parser;
 mod error;
 mod tokenizer;
+mod parse_lines;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GateOperation {
@@ -22,7 +22,7 @@ pub struct Gate {
     pub output_wire: usize,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Header {
     pub num_gates: usize,
     pub num_wires: usize,
@@ -39,15 +39,6 @@ pub struct Circuit {
 
 
 impl Circuit {
-    /// Parses the bristol file contents into a circuit
-    pub fn parse(circuit: &str) -> Result<Self, ParserError> {
-        return Self::parse_stream(&mut circuit.chars());
-    }
-
-    pub fn parse_stream(circuit: &mut dyn Iterator<Item=char>) -> Result<Self, ParserError> {
-        parser::parse(circuit)
-    }
-
     pub fn input_bit_count(&self) -> usize {
         self.header.wires_per_input.iter().sum()
     }
@@ -92,7 +83,7 @@ mod tests {
             2 1 0 1 2 AND\n\
             2 1 1 2 3 XOR\n";
 
-        let circuit = Circuit::parse(source).unwrap();
+        let circuit = parser::parse_str(source).unwrap();
 
         assert_eq!(
             circuit.gates,
@@ -101,5 +92,15 @@ mod tests {
                 Gate{ op: GateOperation::XOR(1, 2), output_wire: 3}
             ]
         );
+
+        assert_eq!(
+            circuit.header,
+            Header {
+                num_gates: 2,
+                num_wires: 4,
+                wires_per_input: vec![1, 1],
+                wires_per_output: vec![1],
+            }
+        )
     }
 }

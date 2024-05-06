@@ -1,6 +1,4 @@
 mod shared_seed;
-mod oclt;
-
 pub use shared_seed::SharedSeedMTP;
 
 use crate::mul_triple::MulTriple;

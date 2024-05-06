@@ -1,6 +1,6 @@
 use std::io;
 use std::thread;
-use mpc_in_rust::circuit::Circuit;
+use mpc_in_rust::circuit;
 use mpc_in_rust::party::new_party_pair;
 
 /// For argument parsing, my favorite crate is clap https://docs.rs/clap/latest/clap/
@@ -19,27 +19,28 @@ fn main() {
     println!("Hello, world!");
 
     let _stdin = io::stdin();
-    
-    let c = Circuit::parse("").unwrap();
+
+    let c = circuit::parser::parse_lines(&mut _stdin.lines().map(|x| x.unwrap())).unwrap();
 
     let (mut p1, mut p2) = new_party_pair(c);
 
     let x: u64 = 123;
     let y: u64 = 456;
 
-    let mut ser_x = [false; 64];
-    let mut ser_y = [false; 64];
-
-    for i in 0..64 {
-        ser_x[i] = (x >> i) & 1 == 1;
-        ser_y[i] = (y >> i) & 1 == 1;
-    }
 
     let h1 = thread::spawn(move || {
+        let mut ser_x = [false; 64];
+        for i in 0..64 {
+            ser_x[i] = (x >> i) & 1 == 1;
+        }
         p1.execute(&ser_x).unwrap()
     });
 
     let h2 = thread::spawn(move || {
+        let mut ser_y = [false; 64];
+        for i in 0..64 {
+            ser_y[i] = (y >> i) & 1 == 1;
+        }
         p2.execute(&ser_y).unwrap()
     });
 

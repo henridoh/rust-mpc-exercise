@@ -1,9 +1,9 @@
-use crate::circuit::{Circuit, Gate, GateOperation, Header};
+use crate::circuit::{Circuit, Gate, GateOperation, Header, parse_lines};
 use crate::circuit::error::ParserError::{Syntax as SyntaxErr, Token as TokenErr, self};
 use crate::circuit::tokenizer::{self, TokenStream, LexicalUnit};
 
 
-pub fn parse_header(token_stream: &mut TokenStream) -> Result<Header, ParserError> {
+fn parse_header(token_stream: &mut TokenStream) -> Result<Header, ParserError> {
     let (num_gates, num_wires) = (token_stream.accept_number()?, token_stream.accept_number()?);
     token_stream.accept_newline()?;
 
@@ -19,7 +19,7 @@ pub fn parse_header(token_stream: &mut TokenStream) -> Result<Header, ParserErro
     Ok(Header { num_gates, num_wires, wires_per_input, wires_per_output })
 }
 
-pub fn parse_gate(token_stream: &mut TokenStream) -> Result<Gate, ParserError> {
+fn parse_gate(token_stream: &mut TokenStream) -> Result<Gate, ParserError> {
     let location = token_stream.current_location();
 
     let n_in_wires = token_stream.accept_number()?;
@@ -104,4 +104,13 @@ pub fn parse(circuit: &mut dyn Iterator<Item=char>) -> Result<Circuit, ParserErr
     }
 
     Ok(Circuit { header, gates })
+}
+
+pub fn parse_str(circuit: &str) -> Result<Circuit, ParserError> {
+    parse(&mut circuit.chars())
+}
+
+pub fn parse_lines(circuit: &mut dyn Iterator<Item=String>) -> Result<Circuit, ParserError> {
+    let mut char_iter = parse_lines::ChatIter::from_lines(circuit);
+    parse(&mut char_iter)
 }

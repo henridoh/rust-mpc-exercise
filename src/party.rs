@@ -5,9 +5,8 @@ pub use error::GMWError;
 pub use role::Role;
 
 
-use std::cell::RefCell;
-use std::rc::Rc;
 use std::sync::mpsc::channel;
+use std::sync::{Arc, Mutex};
 use rand::{Rng, RngCore, thread_rng};
 use rand::distributions::Standard;
 use rand::rngs::StdRng;
@@ -23,7 +22,7 @@ use crate::network::{MemChannelConnection, GMWPacket};
 pub struct Party<M: MTProvider, C: GMWConnection> {
     circuit: Circuit,
     role: Role,
-    mtp: Rc<RefCell<M>>,
+    mtp: Arc<Mutex<M>>,
     connection: C,
 }
 
@@ -48,8 +47,8 @@ pub fn new_party_pair(circuit: Circuit) -> (SimpleParty, SimpleParty) {
     let mut seed: [u8; 32] = Default::default();
     thread_rng().fill_bytes(&mut seed);
 
-    let mtp_a = Rc::new(RefCell::new(SharedSeedMTP::new(seed)));
-    let mtp_b = Rc::new(RefCell::new(SharedSeedMTP::new(seed)));
+    let mtp_a = Arc::new(Mutex::new(SharedSeedMTP::new(seed)));
+    let mtp_b = Arc::new(Mutex::new(SharedSeedMTP::new(seed)));
 
     (Party::new(circuit.clone(), a_connection, Role::Server, mtp_a),
      Party::new(circuit, b_connection, Role::Client, mtp_b))
@@ -69,11 +68,11 @@ fn generate_shares(input: &[bool]) -> (Vec<bool>, Vec<bool>) {
 impl<M: MTProvider, C: GMWConnection> Party<M, C> {
     /// Create a new party.
     fn new(
-        circuit: Circuit, connection: C, role: Role, mtp: Rc<RefCell<M>>,
+        circuit: Circuit, connection: C, role: Role, mtp: Arc<Mutex<M>>,
     ) -> Self { Party { circuit, connection, role, mtp } }
 
     fn compute_and(&self, x: bool, y: bool) -> Result<bool, GMWError> {
-        let MulTriple { a, b, c } = self.mtp.borrow_mut().get_triple();
+        let MulTriple { a, b, c } = self.mtp.lock().unwrap().get_triple();
 
         let (d1, e1) = (x ^ a, y ^ b);
 
@@ -110,7 +109,7 @@ impl<M: MTProvider, C: GMWConnection> Party<M, C> {
         let mut wire_shares = vec![false; self.circuit.header.num_wires];
 
         let own_input_range = self.circuit.parameter_range(self.role.index());
-        let partner_input_range = self.circuit.parameter_range(!self.role.index());
+        let partner_input_range = self.circuit.parameter_range((!self.role).index());
         wire_shares[own_input_range].copy_from_slice(&own_share);
         wire_shares[partner_input_range].copy_from_slice(&partner_share);
 
